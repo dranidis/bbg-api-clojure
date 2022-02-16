@@ -1,25 +1,44 @@
 (ns bbg-api.core
   (:gen-class)
-  (:require [clojure.xml :as xml])
-  (:require  [clojure.edn :as edn]))
+  (:require [clojure.xml :as xml]
+            [clojure.string :as s]))
 
-(defn get-collection-and-write-to-file []
-  (spit "resources/ddmits.clj" 
-        (xml/parse "https://boardgamegeek.com/xmlapi/collection/ddmits")))
+;; 
+;; Collection API 
+;; 
+(defn fetch-collection-and-write-to-file [user-name]
+  (spit "resources/collection.clj"
+        (xml/parse (str "https://boardgamegeek.com/xmlapi/collection/" user-name))))
 
- 
+(defn read-collection-from-file []
+  (:content (read-string (slurp "resources/collection.clj"))))
+
+
+(defn game-id [game]
+  (get-in game [:attrs :objectid]))
+
+;; 
+;; Game api
+;; 
 (defn api-read-game [game-id]
+  (Thread/sleep 1000)
   (-> (xml/parse (str "https://boardgamegeek.com/xmlapi/boardgame/" game-id))
       :content
       first))
- 
 
-(defn read-collection-from-file []
-  (edn/read-string (slurp "resources/ddmits.clj")))
+(defn get-games-and-write-to-file [collection]
+  (spit "resources/games.clj"
+        (reduce
+         #(assoc %1 (get-in %2 [:attrs :objectid]) %2)
+         {}
+         (map api-read-game (map game-id collection)))))
 
-(defn get-games-from-collection [collection]
-  (collection :content))
+(defn read-games-from-file []
+  (read-string (slurp "resources/games.clj")))
 
+;; 
+;; Fields
+;; 
 (defn game-my-rating [game]
   (let [rating (-> game
                    :content
@@ -44,21 +63,12 @@
                    read-string)]
     (if (number? rating) rating nil)))
 
-(defn has-rating? [game]
-  (not (nil? (game-rating game))))
-
 (defn game-name [game]
   (-> game
       :content
       first
       :content
       first))
-
-(defn game-id [game]
-  (get-in game [:attrs :objectid]))
-
-(defn game-better? [g1 g2]
-  (> (game-rating g1) (game-rating g2)))
 
 (defn game-attributes [game]
   (-> game
@@ -73,30 +83,47 @@
       (if value (read-string value) nil))))
 
 "Num of players"
-  (defn polls-with-num-of-players-for-game [game]
-    (let [tag-list (game :content)
-          tag-poll (filter (fn [x] (= (x :tag) :poll)) tag-list)
-          recommended (filter (fn [x] (= (get-in x [:attrs :name]) "suggested_numplayers")) tag-poll)]
-      ((first recommended) :content)))
-
+(defn polls-with-num-of-players-for-game [game]
+  (let [tag-list (game :content)
+        tag-poll (filter (fn [x] (= (x :tag) :poll)) tag-list)
+        recommended (filter (fn [x] (= (get-in x [:attrs :name]) "suggested_numplayers")) tag-poll)]
+    ((first recommended) :content)))
 
 (defn votes-best-rating-per-players [data]
   (let [players (get-in data [:attrs :numplayers])
         total-votes (apply + (map (fn [x] (read-string (get-in x [:attrs :numvotes]))) (data :content)))
-        best-votes (read-string (get-in (first (data :content)) [:attrs :numvotes]))]
+        best-votes (read-string (get-in (first (data :content)) [:attrs :numvotes]))
+        best-perc (if (= 0 best-votes) 0 (/ best-votes total-votes))]
+    {:players players :best-voting best-votes :best-perc best-perc}))
 
-    {:players players :best-voting best-votes :best-perc (/ best-votes total-votes)}))
-
-(defn best-with-num-of-players [game]
-  (let [votes (map votes-best-rating-per-players (polls-with-num-of-players-for-game game))]
+(defn best-with-num-of-players [games collection-game]
+  (let [game (games (game-id collection-game))
+        votes (map votes-best-rating-per-players (polls-with-num-of-players-for-game game))]
     (read-string ((apply max-key :best-perc votes) :players))))
 
+;; 
+;; Sorters
+;; 
+(defn game-better? [g1 g2]
+  (> (game-rating g1) (game-rating g2)))
 
+(defn game-shorter? [g1 g2]
+  (< ((game-attribute g1) :playingtime) ((game-attribute g2) :playingtime)))
 
-"Filters"
-(defn is-best-with-num-of-players [num]
+(defn game-shorter-and-better? [g1 g2]
+  (> (/ (game-rating g1) ((game-attribute g1) :playingtime))
+     (/ (game-rating g2) ((game-attribute g2) :playingtime))))
+
+;; 
+;; Filters
+;; 
+(defn has-name [name]
   (fn [game]
-    (= num (best-with-num-of-players game))))
+    (s/includes? (game-name game) name)))
+
+(defn is-best-with-num-of-players [games num]
+  (fn [game]
+    (= num (best-with-num-of-players games game))))
 
 (defn playingtime-between? [min max]
   (fn [game]
@@ -112,7 +139,9 @@
               (<= ((game-attribute game) :minplayers) num))))
 
 (defn rating-higher-than? [rating]
-  (fn [game] (and (has-rating? game) (>= (game-rating game) rating))))
+  (fn [game]
+    (let [game-rating (game-rating game)]
+      (and (not (nil? game-rating)) (>= game-rating rating)))))
 
 ;; (defn and-filters
 ;;   "Composes filters into one."
@@ -134,45 +163,65 @@
   (println "Hello, World!"))
 
 (comment
-  (def pl (api-read-game "161936"))
-  (def tta (api-read-game "182028"))
 
-  pl
+;; collection
 
-  (def list-pl (-> pl
-                   :content))
+  ; fetch my collection from the api and write it to file in resources
+  (fetch-collection-and-write-to-file "ddmits")
 
-  (def list (filter (fn [x] (= (x :tag) :poll)) list-pl))
-  (def list (filter (fn [x] (= (get-in x [:attrs :name]) "suggested_numplayers")) list))
-  list
-
-
-
-
-  (polls-with-num-of-players-for-game pl)
-  (map votes-best-rating-per-players (polls-with-num-of-players-for-game pl))
-  (def votes (map votes-best-rating-per-players (polls-with-num-of-players-for-game pl)))
-  ((apply max-key :best-perc votes) :players)
-
-  (best-with-num-of-players pl)
-  (best-with-num-of-players tta)
-  ((is-best-with-num-of-players 3) pl)
-
-  (clojure.pprint/pp)
-
-  (nth list-pl 20)
-
-  (get-collection-and-write-to-file)
-  (def collection (get-games-from-collection (read-collection-from-file)))
+  ; read my collection from the file
+  (def collection (read-collection-from-file))
   (def game (first collection))
   (def game (nth collection 1))
   game
   (game-name game)
+  (game-id game)
   (game-rating game)
-  (has-rating? game)
+
+  ; read a game from api
+  (def pl (api-read-game "161936"))
+  (def tta (api-read-game "182028"))
+  (def mar (api-read-game "276025"))
+  (game-id mar)
+
+  ; read games from file
+  (def games (read-games-from-file))
+  games
+  (count games)
+  (keys games)
+
+  (def mar (first (filter (has-name "Maracaibo") collection)))
+  mar
+  (game-id mar)
+  (games (game-id mar))
+  (best-with-num-of-players games mar)
+  ((is-best-with-num-of-players games 3) mar)
+
+  (def game (games (game-id mar)))
+  (polls-with-num-of-players-for-game game)
+  (map votes-best-rating-per-players (polls-with-num-of-players-for-game game))
+  (def votes (map votes-best-rating-per-players (polls-with-num-of-players-for-game game)))
+  votes
+  ((apply max-key :best-perc votes) :players)
+
+
+  (map game-name
+       (sort game-better?
+             (filter
+              (and-filters
+               (with-number-of-players? 3)
+               (is-best-with-num-of-players games 3)
+               (playingtime-between? 0 240)
+               (rating-higher-than? 4))
+              collection)))
+
+  (clojure.pprint/pp)
+
+
+
 
   ((playingtime-between? 20 90) game)
-  
+
   "names of top 10 games in collection"
   (map game-name
        (take 10
@@ -183,16 +232,35 @@
   (take 10
         (map game-name
              (sort game-better?
-                   (filter (with-number-of-players? 2) collection))))
+                   (filter (with-number-of-players? 6) collection))))
+
+  (def subcollection (take 3 collection))
+
+  (count collection)
+
+  (get-games-and-write-to-file collection)
 
 
+  (count collection)
+  (count (keys games))
+  (games "22038")
 
+  (game-id (games "12"))
 
-  (def subcollection (take 10 collection))
+  (is-best-with-num-of-players games 2)
+  tta
+  ((is-best-with-num-of-players games 2) pl)
+
+  (best-with-num-of-players games tta)
+
+  (game-id tta)
+  (games (game-id tta))
+  (def game (games (game-id tta)))
+  game
+
   game-id
 
-  (apply  api-read-game (map game-id subcollection))
-
+  ;(apply  api-read-game (map game-id subcollection))
 
   (take 10
         (map game-name
@@ -203,23 +271,30 @@
   (best-with-num-of-players tta)
 
   (map game-name
-       (sort game-better?
+       (sort game-shorter-and-better?
              (filter
               (and-filters
                (with-number-of-players? 4)
-               (playingtime-between? 0 60)
-               (rating-higher-than? 7.5))
+               (playingtime-between? 0 240)
+               (rating-higher-than? 4))
               collection)))
 
-  (def all (reduce #(assoc %1 (%2 :id) %2) {} [{:id 11 :body "1"} {:id 12 :body "2"}  {:id 13 :body "3"}]))
-  (all 13)
-  
+  (map (juxt game-name game-id game-rating)
+       (sort game-shorter-and-better?
+             (filter
+              (and-filters
+               (with-number-of-players? 2)
+               (playingtime-between? 30 240)
+               (rating-higher-than? 4))
+              collection)))
 
-  (reduce #(assoc %1 :id (%2 :id) :val %2) {} [{:id 1 :body "1"}])
+  (assoc {} :a 1)
 
-  (+ 1 1)
+  (defn fake-fetch []
+    (Thread/sleep 5000)
+    "Ready!")
 
-
+  (fake-fetch)
 
   ;;
   )
