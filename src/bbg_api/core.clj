@@ -120,14 +120,17 @@
         votes (map votes-best-rating-per-players (polls-with-num-of-players-for-game game))]
     ((apply max-key :best-perc votes) :players)))
 
-(defn recommended-best-perc-players [games collection-game players]
+(defn recommended-best-perc-players 
+  "Uses a formula to find a combination of best and recommended"
+  [games collection-game num-players]
   (let [game (games (game-id collection-game))
         _ (println "recommended" (game-name collection-game))
         votes (map votes-best-rating-per-players (polls-with-num-of-players-for-game game))
         percentages (map (fn [r] (double (+ (r :recommended-perc) (r :best-perc)))) votes)]
     ;; Assuming all games have rating for 1 player
-    (if (>= (count percentages) players)
-      (nth percentages (dec players))
+    ;; 1 2 3 4 4+ (5 perc)
+    (if (> (count percentages) num-players)
+      (nth percentages (dec num-players))
       (last percentages))))
 
 ;; 
@@ -154,8 +157,8 @@
   (fn [game]
     (let [best-string (best-with-num-of-players games game)]
       (if (s/includes? best-string "+")
-        ; remove '+' from the '4+'
-        (<= num (read-string (s/join "" (drop-last best-string))))
+        ; remove '+' from the '4+'. 4+ means more than 4.
+        (< num (read-string (s/join "" (drop-last best-string))))
         (= num (read-string best-string))))))
 
 (defn is-playable-with-num-of-players [games num threshold]

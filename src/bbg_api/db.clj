@@ -1,4 +1,4 @@
-(ns bbg-api.writefiles
+(ns bbg-api.db
   (:require [bbg-api.core :as g]
             [clojure.pprint :as pp]))
 
@@ -16,7 +16,7 @@
      :playingtime ((g/game-attribute collection-game) :playingtime)
      :votes votes}))
 
-(defn make-db
+(defn make-db-from-collection-and-games
   [collection games]
   (let [all (map #(collection-game->game games %) collection)
         all-db (reduce
@@ -24,16 +24,26 @@
                 {} all)]
     (spit "resources/db.clj" (with-out-str (pp/pprint all-db)))))
 
+(defn make-db 
+  []
+  (make-db-from-collection-and-games 
+   (g/read-collection-from-file) 
+   (g/read-games-from-file)))
+
 (defn read-db
   []
   (read-string (slurp "resources/db.clj")))
 
 (comment
-  (def collection (g/read-collection-from-file))
-  (def games (g/read-games-from-file))
-  (make-db collection games)
+  ;; (def collection (g/read-collection-from-file))
+  ;; (def games (g/read-games-from-file))
+  ;; (make-db-from-collection-and-games collection games)
+
+  (make-db)
+
   (def db (read-db))
   (db "25613")
+  (pp/pp)
   (def collection (vals db))
 
   (take 2 collection)
