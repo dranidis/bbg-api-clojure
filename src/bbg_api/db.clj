@@ -101,12 +101,12 @@
   (let [players (get-in data [:attrs :numplayers])
         total-votes (apply + (map (fn [x] (read-string (get-in x [:attrs :numvotes]))) (data :content)))
         best-votes (read-string (get-in (first (data :content)) [:attrs :numvotes]))
-        best-perc (if (= 0 total-votes) 0 (/ best-votes total-votes))
+        best-perc (if (= 0 total-votes) 0 (double (/ best-votes total-votes)))
 
         recommended-votes (read-string (get-in (second (data :content)) [:attrs :numvotes]))
-        recommended-perc (if (= 0 total-votes) 0 (/ recommended-votes total-votes))
+        recommended-perc (if (= 0 total-votes) 0 (double (/ recommended-votes total-votes)))
         not-recommended-votes (read-string (get-in (last (data :content)) [:attrs :numvotes]))
-        not-recommended-perc (if (= 0 total-votes) 0 (/ not-recommended-votes total-votes))]
+        not-recommended-perc (if (= 0 total-votes) 0 (double (/ not-recommended-votes total-votes)))]
     {:players players
      :best-votes best-votes :best-perc best-perc
      :recommended-votes recommended-votes :recommended-perc recommended-perc
