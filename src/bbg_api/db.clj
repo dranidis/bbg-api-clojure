@@ -1,6 +1,8 @@
 (ns bbg-api.db
   (:require [clojure.xml :as xml]
-            [clojure.pprint :as pp]))
+            [clojure.pprint :as pp]
+            [bbg-api.sort-filter :refer [has-name]]
+            [clojure.string :as s]))
 ;; 
 ;; Fields accessors from API XML
 ;; 
@@ -25,7 +27,7 @@
                    :content
                    first
                    :content
-                   (nth 2)
+                   (second)
                    :attrs
                    :value
                    read-string)]
@@ -119,8 +121,8 @@
 (defn- collection-game->game
   [games collection-game]
   (let [game-id (game-id collection-game)
-        votes (map votes-best-rating-per-players
-                   (polls-with-num-of-players-for-game (games game-id)))]
+        votes (into [] (map votes-best-rating-per-players
+                   (polls-with-num-of-players-for-game (games game-id))))]
     {:id game-id
      :name (game-name collection-game)
      :rating (game-rating collection-game)
@@ -161,6 +163,19 @@
   (def collection (vals db))
 
   (take 2 collection)
+
+  (def collection (read-collection-from-file))
+  (first collection)
+  
+  (filter (fn [game]
+    (s/includes? (game-name game) "Caverna")) collection)
+  
+  (def db (read-db))
+  (db "102794")
+  
+  (map :name collection)
+  
+
   (clojure.pprint/pp)
   ;
   )
