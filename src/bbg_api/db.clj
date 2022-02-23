@@ -7,28 +7,41 @@
 (defn- game-id [game]
   (get-in game [:attrs :objectid]))
 
+(defn with-tag?
+  [tag-name]
+  (fn [{:keys [tag]}]
+    (= tag tag-name)))
+
+(defn- game-stats [collection-game]
+  (->> collection-game
+       :content
+       (filter (with-tag? :stats))
+       first))
+
+(defn- game-attributes [collection-game]
+  (:attrs (game-stats collection-game)))
+
 (defn- game-my-rating [collection-game]
-  (let [rating (-> collection-game
-                   :content
-                   (nth 4)
-                   :content
-                   first
-                   :attrs
-                   :value
-                   read-string)]
+  (let [rating (->> (game-stats collection-game)
+                    :content
+                    (filter (with-tag? :rating))
+                    first
+                    :attrs
+                    :value
+                    read-string)]
     (if (number? rating) rating nil)))
 
 (defn- game-rating [collection-game]
-  (let [rating (-> collection-game
-                   :content
-                   (nth 4)
-                   :content
-                   first
-                   :content
-                   (nth 2)
-                   :attrs
-                   :value
-                   read-string)]
+  (let [rating (->> (game-stats collection-game)
+                    :content
+                    (filter (with-tag? :rating))
+                    first
+                    :content
+                    (filter (with-tag? :average))
+                    first
+                    :attrs
+                    :value
+                    read-string)]
     (if (number? rating) rating nil)))
 
 (defn- game-name [collection-game]
@@ -38,11 +51,9 @@
       :content
       first))
 
-(defn- game-attributes [collection-game]
-  (-> collection-game
-      :content
-      (nth 4)
-      :attrs))
+
+
+
 
 (defn- game-attribute [collection-game]
   (fn [key]
@@ -87,6 +98,28 @@
 
 (defn read-collection-from-file []
   (:content (read-string (slurp "resources/collection.clj"))))
+
+(comment
+  (fetch-collection-and-write-to-file "cinmel")
+  (def collection (read-collection-from-file))
+  (def game (first collection))
+  (game-stats game)
+  (game-rating game)
+  (pp/pp)
+  (->> game
+       :content
+       (filter (fn [{:keys [tag]}] (= tag :stats)))
+       first
+       :attrs)
+
+  (:minplaytime (game-attributes game))
+  (count collection)
+  (map #(:minplaytime (game-attributes %)) collection)
+  (map game-rating collection)
+  (map game-name collection)
+
+  ;
+  )
 
 ;; 
 ;; Functions for numbers of players
