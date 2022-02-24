@@ -103,6 +103,23 @@
   (fetch-collection-and-write-to-file "cinmel")
   (def collection (read-collection-from-file))
   (def game (first collection))
+  game
+
+  ;; mutual recursion
+  (declare parse)
+  (defn parse-list [s tag] (map #(parse % tag) s))
+
+  (defn parse [s tag]
+    (if ((with-tag? tag) s)
+      s
+      (if (:content s)
+        (parse-list (:content s) tag)
+        nil)))
+
+  (parse game :average)
+
+
+
   (game-stats game)
   (game-rating game)
   (pp/pp)
@@ -116,6 +133,7 @@
   (count collection)
   (map #(:minplaytime (game-attributes %)) collection)
   (map game-rating collection)
+  (map game-my-rating collection)
   (map game-name collection)
 
   ;
