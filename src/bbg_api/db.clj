@@ -1,7 +1,6 @@
 (ns bbg-api.db
   (:require [clojure.xml :as xml]
             [clojure.pprint :as pp]
-            [bbg-api.sort-filter :refer [has-name]]
             [clojure.string :as s]))
 ;; 
 ;; Fields accessors from API XML
@@ -51,6 +50,19 @@
     (let [attr (game-attributes collection-game)
           value (attr key)]
       (if value (read-string value) nil))))
+
+(comment
+  ;
+
+(defn parse-fn 
+  [{:keys [tag]}]
+  tag)
+1
+   ;
+  )
+
+
+
 
 ;; (defn game-playingtime [collection-game]
 ;;   ((game-attribute collection-game) :playingtime))
