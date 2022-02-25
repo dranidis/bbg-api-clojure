@@ -7,42 +7,47 @@
 (defn- game-id [game]
   (get-in game [:attrs :objectid]))
 
-(defn with-tag?
+(defn has-tag?
   [tag-name]
   (fn [{:keys [tag]}]
     (= tag tag-name)))
 
-(defn- game-stats [collection-game]
-  (->> collection-game
-       :content
-       (filter (with-tag? :stats))
+  ;; mutual recursion
+(declare find-element-with-tag)
+(defn- find-tag-list
+  [s tag]
+  (->> (map #(find-element-with-tag tag %) s)
+       flatten
+       (drop-while nil?)
        first))
 
+(defn- find-element-with-tag [tag s]
+  (if ((has-tag? tag) s)
+    s
+    (if (:content s)
+      (find-tag-list (:content s) tag)
+      nil)))
+
 (defn- game-attributes [collection-game]
-  (:attrs (game-stats collection-game)))
+  (->> (find-element-with-tag :stats collection-game)
+       :attrs))
 
 (defn- game-my-rating [collection-game]
-  (let [rating (->> (game-stats collection-game)
-                    :content
-                    (filter (with-tag? :rating))
-                    first
+  (let [my-rating (->> (find-element-with-tag :rating collection-game)
+                       :attrs
+                       :value
+                       read-string)]
+    (if (number? my-rating) my-rating nil)))
+
+(defn- game-rating [collection-game]
+  (let [rating (->> (find-element-with-tag :rating collection-game)
+                    (find-element-with-tag :average)
                     :attrs
                     :value
                     read-string)]
     (if (number? rating) rating nil)))
 
-(defn- game-rating [collection-game]
-  (let [rating (->> (game-stats collection-game)
-                    :content
-                    (filter (with-tag? :rating))
-                    first
-                    :content
-                    (filter (with-tag? :average))
-                    first
-                    :attrs
-                    :value
-                    read-string)]
-    (if (number? rating) rating nil)))
+
 
 (defn- game-name [collection-game]
   (-> collection-game
@@ -105,19 +110,11 @@
   (def game (first collection))
   game
 
-  ;; mutual recursion
-  (declare parse)
-  (defn parse-list [s tag] (map #(parse % tag) s))
 
-  (defn parse [s tag]
-    (if ((with-tag? tag) s)
-      s
-      (if (:content s)
-        (parse-list (:content s) tag)
-        nil)))
-
-  (parse game :average)
-
+  (game-attributes game)
+  (->> (find-element-with-tag game :stats)
+       :attrs
+       :maxplaytime)
 
 
   (game-stats game)
